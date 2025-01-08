@@ -8,9 +8,10 @@ module load cmake
 if false; then
     module load openmpi/4.1.5-gcc
 else
-    export PATH=~/ompi/install/lib:$PATH
-    export PATH=~/ompi/install/bin:$PATH
+    export PATH=${HOME}/ompi/install/lib:$PATH
+    export PATH=${HOME}/ompi/install/bin:$PATH
 fi
+export MPIDPU_ROOT="/gpfs/projects/bsc85/mpi_offload"
 
 build_dir="$( pwd )/build"
 if [ ! -d "${build_dir}" ]; then mkdir "${build_dir}"; fi
@@ -29,5 +30,5 @@ cmake \
    -D LAMMPS_MACHINE=mpi \
    -S ./cmake -B ${build_dir} $*
 
-cmake --build ${build_dir} -j
+cmake --build ${build_dir} -j 8
 
