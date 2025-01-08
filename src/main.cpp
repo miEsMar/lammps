@@ -16,9 +16,10 @@
 #include "exceptions.h"
 #include "input.h"
 #include "library.h"
+#include "lammps_mpi.h"
 
 #include <cstdlib>
-#include <mpi.h>
+
 #include <new>
 
 #if defined(LAMMPS_TRAP_FPE) && defined(_GNU_SOURCE)

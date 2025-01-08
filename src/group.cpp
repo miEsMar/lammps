@@ -1386,6 +1386,8 @@ double Group::gyration(int igroup, double masstotal, double *cm)
         massone = mass[type[i]];
       rg += (dx * dx + dy * dy + dz * dz) * massone;
     }
+
+   // TODO: check if this can be put in the if condition
   double rg_all;
   MPI_Allreduce(&rg, &rg_all, 1, MPI_DOUBLE, MPI_SUM, world);
 

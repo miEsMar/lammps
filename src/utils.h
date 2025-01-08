@@ -18,8 +18,7 @@
 
 #include "fmt/format.h"
 #include "lmptype.h"
-
-#include <mpi.h>
+#include "lammps_mpi.h"
 
 #include <string>
 #include <vector>    // IWYU pragma: export

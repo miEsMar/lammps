@@ -17,7 +17,6 @@
 
 #define LAMMPS_LIB_MPI 1
 #include "library.h"
-#include <mpi.h>
 #include <algorithm>
 
 #include "accelerator_kokkos.h"
@@ -56,6 +55,8 @@
 #include "update.h"
 #include "variable.h"
 #include "version.h"
+
+#include "lammps_mpi.h"
 
 #include <cstring>
 

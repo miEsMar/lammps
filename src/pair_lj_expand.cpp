@@ -20,6 +20,7 @@
 #include "math_const.h"
 #include "memory.h"
 #include "neigh_list.h"
+#include "lammps_mpi.h"
 
 #include <cmath>
 #include <cstring>
@@ -261,7 +262,14 @@ double PairLJExpand::init_one(int i, int j)
       if (type[k] == i) count[0] += 1.0;
       if (type[k] == j) count[1] += 1.0;
     }
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    MPI_Request req;
+
+    MPI_Iallreduce(count, all, 2, MPI_DOUBLE, MPI_SUM, world, &req);
+#else
     MPI_Allreduce(count, all, 2, MPI_DOUBLE, MPI_SUM, world);
+#endif
 
     double sig2 = sigma[i][j] * sigma[i][j];
     double sig6 = sig2 * sig2 * sig2;
@@ -272,6 +280,10 @@ double PairLJExpand::init_one(int i, int j)
     double shift1 = shift[i][j];
     double shift2 = shift1 * shift1;
     double shift3 = shift2 * shift1;
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
 
     etail_ij = 8.0 * MY_PI * all[0] * all[1] * epsilon[i][j] * sig6 *
         ((1.0 / 9.0 + 2.0 * shift1 / (10.0 * rc1) + shift2 / (11.0 * rc2)) * sig6 / rc9 -

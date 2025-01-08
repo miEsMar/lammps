@@ -243,11 +243,30 @@ void PairCoulWolf::read_restart(FILE *fp)
 
   int i, j;
   int me = comm->me;
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  int nreqs = 0;
+  MPI_Request *reqs = NULL;
+
+  i = atom->ntypes;
+  i = (i*i + i) / 2;   //  NOTE: this is an overestimation considered the following code!
+  reqs = (MPI_Request *)malloc((size_t)i * sizeof(MPI_Request));
+
+  for (i = 1; i <= atom->ntypes; i++) {
+    for (j = i; j <= atom->ntypes; j++) {
+      if (me == 0) utils::sfread(FLERR, &setflag[i][j], sizeof(int), 1, fp, nullptr, error);
+      MPI_Ibcast(&setflag[i][j], 1, MPI_INT, 0, world, &reqs[nreqs]);
+      ++nreqs;
+    }
+  }
+  ++nreqs;
+  MPI_Waitall(nreqs, reqs, MPI_STATUSES_IGNORE);
+#else
   for (i = 1; i <= atom->ntypes; i++)
     for (j = i; j <= atom->ntypes; j++) {
       if (me == 0) utils::sfread(FLERR, &setflag[i][j], sizeof(int), 1, fp, nullptr, error);
       MPI_Bcast(&setflag[i][j], 1, MPI_INT, 0, world);
     }
+#endif
 }
 
 /* ----------------------------------------------------------------------

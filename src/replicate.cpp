@@ -29,6 +29,7 @@
 #include "label_map.h"
 #include "memory.h"
 #include "special.h"
+#include "lammps_mpi.h"
 
 #include <cstring>
 
@@ -604,12 +605,41 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   int * size_buf_rnk;
   memory->create(size_buf_rnk, nprocs, "replicate:size_buf_rnk");
 
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request allgvreq;
+  MPI_Iallgather(&n, 1, MPI_INT, size_buf_rnk, 1, MPI_INT, world, &allgvreq);
+#else
   MPI_Allgather(&n, 1, MPI_INT, size_buf_rnk, 1, MPI_INT, world);
+#endif
 
   // size of buf_all
 
   int size_buf_all = 0;
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request allrreq;
+  MPI_Iallreduce(&n, &size_buf_all, 1, MPI_INT, MPI_SUM, world, &allrreq);
+#else
   MPI_Allreduce(&n, &size_buf_all, 1, MPI_INT, MPI_SUM, world);
+#endif
+
+  // rnk offsets
+
+  int *disp_buf_rnk;
+  memory->create(disp_buf_rnk, nprocs, "replicate:disp_buf_rnk");
+  disp_buf_rnk[0] = 0;
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Wait(&allgvreq, MPI_STATUS_IGNORE);
+#endif
+
+  for (i = 1; i < nprocs; i++)
+    disp_buf_rnk[i] = disp_buf_rnk[i-1] + size_buf_rnk[i-1];
+
+  // allgather buf_all
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Wait(&allrreq, MPI_STATUS_IGNORE);
+#endif
 
   if (me == 0) {
     auto mesg = fmt::format("  bounding box image = ({} {} {}) "
@@ -621,21 +651,20 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
     utils::logmesg(lmp,mesg);
   }
 
-  // rnk offsets
-
-  int *disp_buf_rnk;
-  memory->create(disp_buf_rnk, nprocs, "replicate:disp_buf_rnk");
-  disp_buf_rnk[0] = 0;
-  for (i = 1; i < nprocs; i++)
-    disp_buf_rnk[i] = disp_buf_rnk[i-1] + size_buf_rnk[i-1];
-
-  // allgather buf_all
-
   double *buf_all;
   memory->create(buf_all, size_buf_all, "replicate:buf_all");
 
-  MPI_Allgatherv(buf,n,MPI_DOUBLE,buf_all,size_buf_rnk,disp_buf_rnk,
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Iallgatherv(buf,n,MPI_DOUBLE,
+                  buf_all,size_buf_rnk,disp_buf_rnk,MPI_DOUBLE,
+                  world,&allgvreq);
+#else
+  MPI_Allgatherv(buf,n,MPI_DOUBLE,
+                 buf_all,size_buf_rnk,disp_buf_rnk,
                  MPI_DOUBLE,world);
+#endif
+
 
   // bounding box of original unwrapped system
 
@@ -669,6 +698,11 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
 
   // if bond/periodic option
   // store old_x and old_tag for the entire original system
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  // TODO: this can be improved
+  MPI_Wait(&allgvreq, MPI_STATUS_IGNORE);
+#endif
 
   if (bond_flag) {
     memory->create(old_x,old->natoms,3,"replicate:old_x");

@@ -20,6 +20,7 @@
 
 #include <cmath>
 #include <cstring>
+#include "lammps_mpi.h"
 
 using namespace LAMMPS_NS;
 
@@ -100,15 +101,19 @@ void ComputeDipole::compute_vector()
       comproc[2] += unwrap[2] * massone;
     }
   }
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request reqs[4];
+
+  MPI_Iallreduce(&massproc, &masstotal, 1, MPI_DOUBLE, MPI_SUM, world, reqs);
+  MPI_Iallreduce(comproc,   com,        3, MPI_DOUBLE, MPI_SUM, world, &reqs[1]);
+  MPI_Iallreduce(&chrgproc, &chrgtotal, 1, MPI_DOUBLE, MPI_SUM, world, &reqs[2]);
+#else
   MPI_Allreduce(&massproc, &masstotal, 1, MPI_DOUBLE, MPI_SUM, world);
   MPI_Allreduce(&chrgproc, &chrgtotal, 1, MPI_DOUBLE, MPI_SUM, world);
   MPI_Allreduce(comproc, com, 3, MPI_DOUBLE, MPI_SUM, world);
+#endif
 
-  if (masstotal > 0.0) {
-    com[0] /= masstotal;
-    com[1] /= masstotal;
-    com[2] /= masstotal;
-  }
 
   // compute dipole moment
 
@@ -129,9 +134,23 @@ void ComputeDipole::compute_vector()
     }
   }
 
-  MPI_Allreduce(dipole, vector, 3, MPI_DOUBLE, MPI_SUM, world);
-
   // correct for position dependence with a net charged group
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Iallreduce(dipole, vector, 3, MPI_DOUBLE, MPI_SUM, world, &reqs[3]);
+
+  MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE);  // Wait for masstotal, com
+#else
+  MPI_Allreduce(dipole, vector, 3, MPI_DOUBLE, MPI_SUM, world);
+#endif
+
+  if (masstotal > 0.0) {
+    com[0] /= masstotal;
+    com[1] /= masstotal;
+    com[2] /= masstotal;
+  }
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Waitall(2, &reqs[2], MPI_STATUSES_IGNORE);  // Wait for chrgtotal, vector
+#endif
   vector[0] -= chrgtotal * com[0];
   vector[1] -= chrgtotal * com[1];
   vector[2] -= chrgtotal * com[2];

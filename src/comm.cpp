@@ -34,6 +34,7 @@
 #include "procmap.h"
 #include "universe.h"
 #include "update.h"
+#include "lammps_mpi.h"
 
 #include <cstring>
 #ifdef _OPENMP
@@ -1039,11 +1040,22 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
   memcpy(sendcount,procs_a2a,nprocs*sizeof(int));
 
   memory->create(recvcount,nprocs,"rendezvous:recvcount");
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request req;
+
+  MPI_Ialltoall(sendcount,1,MPI_INT,recvcount,1,MPI_INT,world, &req);
+#else
   MPI_Alltoall(sendcount,1,MPI_INT,recvcount,1,MPI_INT,world);
+#endif
 
   memory->create(sdispls,nprocs,"rendezvous:sdispls");
   memory->create(rdispls,nprocs,"rendezvous:rdispls");
   sdispls[0] = rdispls[0] = 0;
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
+
   for (int i = 1; i < nprocs; i++) {
     sdispls[i] = sdispls[i-1] + sendcount[i-1];
     rdispls[i] = rdispls[i-1] + recvcount[i-1];
@@ -1171,8 +1183,13 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
 
   outbuf = (char *) memory->smalloc((bigint) nout*outsize+1,"rendezvous:outbuf");
 
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Ialltoallv(outbuf_a2a,sendcount,sdispls,MPI_CHAR,
+                 outbuf,recvcount,rdispls,MPI_CHAR,world, &req);
+#else
   MPI_Alltoallv(outbuf_a2a,sendcount,sdispls,MPI_CHAR,
                 outbuf,recvcount,rdispls,MPI_CHAR,world);
+#endif
 
   memory->destroy(procs_rvous);
   memory->sfree(outbuf_rvous);
@@ -1197,6 +1214,9 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
                                  (bigint) nrvous_out*sizeof(int) +
                                  4*nprocs*sizeof(int) +
                                  MAX(all2all1_bytes,all2all2_bytes));
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
   return nout;
 }
 

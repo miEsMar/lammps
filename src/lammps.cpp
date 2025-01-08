@@ -792,11 +792,12 @@ LAMMPS::~LAMMPS() noexcept(false)
 
   double totalclock = platform::walltime() - initclock;
   if ((me == 0) && (screen || logfile)) {
+    utils::logmesg(this, "Total wall time [s]: {}\n", totalclock);
     int seconds = fmod(totalclock,60.0);
     totalclock  = (totalclock - seconds) / 60.0;
     int minutes = fmod(totalclock,60.0);
     int hours = (totalclock - minutes) / 60.0;
-    utils::logmesg(this, "Total wall time: {}:{:02d}:{:02d}\n", hours, minutes, seconds);
+    utils::logmesg(this, "                     {}:{:02d}:{:02d}\n", hours, minutes, seconds);
   }
 
   if (universe->nworlds == 1) {

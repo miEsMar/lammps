@@ -15,9 +15,10 @@
 #define LMP_LAMMPS_H
 
 #include <cstdio>
-#include <mpi.h>
 #include <string>
 #include <vector>
+
+#include "lammps_mpi.h"
 
 namespace LAMMPS_NS {
 

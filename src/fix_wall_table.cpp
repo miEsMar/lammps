@@ -370,14 +370,32 @@ void FixWallTable::bcast_table(Table &tb)
     memory->create(tb.ffile, tb.ninput, "wall:ffile");
   }
 
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request fpflag_req;
+  MPI_Request other_reqs[5];
+  int nother_reqs = 3;
+
+  MPI_Ibcast(&tb.fpflag, 1, MPI_INT, 0, world, &fpflag_req);
+  MPI_Ibcast(tb.rfile, tb.ninput, MPI_DOUBLE, 0, world, &other_reqs[0]);
+  MPI_Ibcast(tb.efile, tb.ninput, MPI_DOUBLE, 0, world, &other_reqs[1]);
+  MPI_Ibcast(tb.ffile, tb.ninput, MPI_DOUBLE, 0, world, &other_reqs[2]);
+  MPI_Wait(&fpflag_req, MPI_STATUS_IGNORE);
+#else
   MPI_Bcast(tb.rfile, tb.ninput, MPI_DOUBLE, 0, world);
   MPI_Bcast(tb.efile, tb.ninput, MPI_DOUBLE, 0, world);
   MPI_Bcast(tb.ffile, tb.ninput, MPI_DOUBLE, 0, world);
-
   MPI_Bcast(&tb.fpflag, 1, MPI_INT, 0, world);
+#endif
   if (tb.fpflag) {
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    nother_reqs = 5;
+    MPI_Ibcast(&tb.fplo, 1, MPI_DOUBLE, 0, world, &other_reqs[3]);
+    MPI_Ibcast(&tb.fphi, 1, MPI_DOUBLE, 0, world, &other_reqs[4]);
+    MPI_Waitall(nother_reqs, other_reqs, MPI_STATUSES_IGNORE);
+#else
     MPI_Bcast(&tb.fplo, 1, MPI_DOUBLE, 0, world);
     MPI_Bcast(&tb.fphi, 1, MPI_DOUBLE, 0, world);
+#endif
   }
 }
 

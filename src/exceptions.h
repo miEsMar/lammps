@@ -15,8 +15,9 @@
 #define LMP_EXCEPTIONS_H
 
 #include <exception>
-#include <mpi.h>
 #include <string>
+
+#include "lammps_mpi.h"
 
 namespace LAMMPS_NS {
 

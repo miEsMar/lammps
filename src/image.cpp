@@ -27,6 +27,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include "lammps_mpi.h"
 
 #ifdef LAMMPS_JPEG
 #include <jpeglib.h>
@@ -314,6 +315,9 @@ void Image::clear()
 void Image::merge()
 {
   MPI_Request requests[3];
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request srequests[3];
+#endif
 
   int nhalf = 1;
   while (nhalf < nprocs) nhalf *= 2;
@@ -323,10 +327,10 @@ void Image::merge()
     if (me < nhalf && me+nhalf < nprocs) {
       MPI_Irecv(rgbcopy,npixels*3,MPI_BYTE,me+nhalf,0,world,&requests[0]);
       MPI_Irecv(depthcopy,npixels,MPI_DOUBLE,me+nhalf,0,world,&requests[1]);
-      if (ssao)
-        MPI_Irecv(surfacecopy,npixels*2,MPI_DOUBLE,
-                  me+nhalf,0,world,&requests[2]);
-      if (ssao) MPI_Waitall(3,requests,MPI_STATUS_IGNORE);
+      if (ssao) {
+        MPI_Irecv(surfacecopy,npixels*2,MPI_DOUBLE,me+nhalf,0,world,&requests[2]);
+        MPI_Waitall(3,requests,MPI_STATUS_IGNORE);
+      }
       else MPI_Waitall(2,requests,MPI_STATUS_IGNORE);
 
       for (int i = 0; i < npixels; i++) {
@@ -344,9 +348,20 @@ void Image::merge()
       }
 
     } else if (me >= nhalf && me < 2*nhalf) {
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+      MPI_Isend(imageBuffer,npixels*3,MPI_BYTE,me-nhalf,0,world,srequests);
+      MPI_Isend(depthBuffer,npixels,MPI_DOUBLE,me-nhalf,0,world,&srequests[1]);
+      if (ssao) {
+         MPI_Isend(surfaceBuffer,npixels*2,MPI_DOUBLE,me-nhalf,0,world,&srequests[2]);
+         MPI_Waitall(3,srequests,MPI_STATUS_IGNORE);
+      } else {
+         MPI_Waitall(2,srequests,MPI_STATUS_IGNORE);
+      }
+#else
       MPI_Send(imageBuffer,npixels*3,MPI_BYTE,me-nhalf,0,world);
       MPI_Send(depthBuffer,npixels,MPI_DOUBLE,me-nhalf,0,world);
       if (ssao) MPI_Send(surfaceBuffer,npixels*2,MPI_DOUBLE,me-nhalf,0,world);
+#endif
     }
 
     nhalf /= 2;
@@ -359,19 +374,25 @@ void Image::merge()
   // use Gatherv() if subset of pixels is not the same size on every proc
 
   if (ssao) {
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    MPI_Ibcast(depthBuffer,npixels,MPI_DOUBLE,0,world,requests);
+    MPI_Ibcast(surfaceBuffer,npixels*2,MPI_DOUBLE,0,world,&requests[1]);
+    MPI_Ibcast(imageBuffer,npixels*3,MPI_BYTE,0,world,&requests[2]);
+    compute_SSAO((void*)requests);
+#else
     MPI_Bcast(imageBuffer,npixels*3,MPI_BYTE,0,world);
     MPI_Bcast(surfaceBuffer,npixels*2,MPI_DOUBLE,0,world);
     MPI_Bcast(depthBuffer,npixels,MPI_DOUBLE,0,world);
     compute_SSAO();
+#endif
 
     int pixelstart = 3 * static_cast<int> (1.0*me/nprocs * npixels);
-    int pixelstop = 3 * static_cast<int> (1.0*(me+1)/nprocs * npixels);
-    int mypixels = pixelstop - pixelstart;
+    int pixelstop  = 3 * static_cast<int> (1.0*(me+1)/nprocs * npixels);
+    int mypixels   = pixelstop - pixelstart;
 
     if (npixels % nprocs == 0) {
       MPI_Gather(imageBuffer+pixelstart,mypixels,MPI_BYTE,
                  rgbcopy,mypixels,MPI_BYTE,0,world);
-
     } else {
       if (recvcounts == nullptr) {
         memory->create(recvcounts,nprocs,"image:recvcounts");
@@ -385,7 +406,6 @@ void Image::merge()
       MPI_Gatherv(imageBuffer+pixelstart,mypixels,MPI_BYTE,
                   rgbcopy,recvcounts,displs,MPI_BYTE,0,world);
     }
-
     writeBuffer = rgbcopy;
   } else {
     writeBuffer = imageBuffer;
@@ -403,9 +423,9 @@ void Image::merge()
         int out = 3*(width/2)*(h/2) + 3*(w/2);
         for (int i=0; i < 3; ++i) {
           writeBuffer[out+i] = (unsigned char) (0.25*((int)writeBuffer[idx1+i]
-                                                      +(int)writeBuffer[idx2+i]
-                                                      +(int)writeBuffer[idx3+i]
-                                                      +(int)writeBuffer[idx4+i]));
+                                                    + (int)writeBuffer[idx2+i]
+                                                    + (int)writeBuffer[idx3+i]
+                                                    + (int)writeBuffer[idx4+i]));
         }
       }
     }
@@ -937,8 +957,11 @@ void Image::draw_pixel(int ix, int iy, double depth,
 }
 
 /* ---------------------------------------------------------------------- */
-
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+void Image::compute_SSAO(void *reqs)
+#else
 void Image::compute_SSAO()
+#endif
 {
   // used for rasterizing the spheres
 
@@ -962,6 +985,11 @@ void Image::compute_SSAO()
   // file buffer with random numbers to avoid race conditions
   double *uniform = new double[pixelstop - pixelstart];
   for (int i = 0; i < pixelstop - pixelstart; ++i) uniform[i] = random->uniform();
+
+  // Defer wait of request right before data is really needed.
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Waitall(3, (MPI_Request *)reqs, MPI_STATUSES_IGNORE);
+#endif
 
 #if defined(_OPENMP)
 #pragma omp parallel for

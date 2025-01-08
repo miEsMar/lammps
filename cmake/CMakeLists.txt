@@ -91,7 +91,7 @@ check_for_autogen_files(${LAMMPS_SOURCE_DIR})
 
 ######################################################################
 # compiler tests
-# these need ot be done early (before further tests).
+# these need to be done early (before further tests).
 #####################################################################
 include(CheckIncludeFileCXX)
 
@@ -231,23 +231,43 @@ else()
 endif()
 
 
+# Define list of target extensions
+# set(all_target_exts "" "_dpu" "_dpu_test")
+set(all_target_exts "" "_dpu" "_dpu_test" "_opt" "_dpu_opt" "_dpu_test_opt")
+add_library(libmpi_dpu SHARED IMPORTED GLOBAL)
+add_library(libmpi_dpu_test SHARED IMPORTED GLOBAL)
+set_target_properties(libmpi_dpu PROPERTIES IMPORTED_LOCATION "/gpfs/projects/bsc85/mpi_offload/libmpidpu_ompi.so")
+set_target_properties(libmpi_dpu_test PROPERTIES IMPORTED_LOCATION "/gpfs/projects/bsc85/mpi_offload/libmpidpu_ompi_test.so")
+
+
 file(GLOB ALL_SOURCES CONFIGURE_DEPENDS ${LAMMPS_SOURCE_DIR}/[^.]*.cpp)
 file(GLOB MAIN_SOURCES CONFIGURE_DEPENDS ${LAMMPS_SOURCE_DIR}/main.cpp)
 list(REMOVE_ITEM ALL_SOURCES ${MAIN_SOURCES})
-add_library(lammps ${ALL_SOURCES})
+foreach(ext IN LISTS all_target_exts)
+    add_library(lammps${ext} ${ALL_SOURCES})
+endforeach()
 
 # tell CMake to export all symbols to a .dll on Windows with MinGW cross-compilers
 if(BUILD_SHARED_LIBS AND (CMAKE_SYSTEM_NAME STREQUAL "Windows") AND CMAKE_CROSSCOMPILING)
-  set_target_properties(lammps PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+   foreach(ext IN LISTS all_target_exts)
+      set_target_properties(lammps${ext} PROPERTIES LINK_FLAGS "-Wl,--export-all-symbols")
+   endforeach()
 endif()
 
-add_executable(lmp ${MAIN_SOURCES})
-target_link_libraries(lmp PRIVATE lammps)
-set_target_properties(lmp PROPERTIES OUTPUT_NAME ${LAMMPS_BINARY})
+foreach(ext IN LISTS all_target_exts)
+    add_executable(lmp${ext} ${MAIN_SOURCES})
+    target_link_libraries(lmp${ext} PRIVATE lammps${ext})
+    set_target_properties(lmp${ext} PROPERTIES OUTPUT_NAME ${LAMMPS_BINARY}${ext})
+endforeach()
+
 # re-export all symbols for plugins
 if(PKG_PLUGIN AND (NOT ((CMAKE_SYSTEM_NAME STREQUAL "Windows"))))
-  set_target_properties(lmp PROPERTIES ENABLE_EXPORTS TRUE)
+    foreach(ext IN LISTS all_target_exts)
+        set_target_properties(lmp${ext} PROPERTIES ENABLE_EXPORTS TRUE)
+    endforeach()
 endif()
+
+# TODO: check how to integrate this line
 install(TARGETS lmp EXPORT LAMMPS_Targets DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 option(CMAKE_VERBOSE_MAKEFILE "Generate verbose Makefiles" OFF)
@@ -350,7 +370,9 @@ endforeach()
 ######################################################
 # packages with special compiler needs or external libs
 ######################################################
-target_include_directories(lammps PUBLIC $<BUILD_INTERFACE:${LAMMPS_SOURCE_DIR}>)
+foreach(ext IN LISTS all_target_exts)
+    target_include_directories(lammps${ext} PUBLIC $<BUILD_INTERFACE:${LAMMPS_SOURCE_DIR}>)
+endforeach()
 
 if(PKG_ADIOS)
   # The search for ADIOS2 must come before MPI because
@@ -377,6 +399,7 @@ else()
   option(BUILD_MPI "Build MPI version" OFF)
 endif()
 
+
 if(BUILD_MPI)
   # do not include the (obsolete) MPI C++ bindings which makes
   # for leaner object files and avoids namespace conflicts
@@ -391,7 +414,22 @@ if(BUILD_MPI)
       target_compile_definitions(lammps PRIVATE -DLAMMPS_LONGLONG_TO_LONG)
     endif()
   endif()
-  target_link_libraries(lammps PUBLIC MPI::MPI_CXX)
+  foreach(ext IN LISTS all_target_exts)
+    target_link_libraries(lammps${ext} PUBLIC MPI::MPI_CXX)
+    if (NOT "${ext}" STREQUAL "")
+        if ("${ext}" MATCHES "_opt")
+            target_compile_definitions(lammps${ext} PRIVATE LAMMPS_MPIDPU_OPTIMISED_CODE)
+        endif()
+        if (NOT "${ext}" STREQUAL "_opt")
+            string(REPLACE "_opt" "" ext_ ext)
+            foreach(_tgt IN LISTS "lammps" "lmp")
+               target_compile_definitions(${_tgt}${ext} PRIVATE LAMMPS_MPIDPU)
+               target_include_directories(${_tgt}${ext} PUBLIC  "/gpfs/projects/bsc85/mpi_offload/src")
+               target_link_libraries(${_tgt}${ext} PUBLIC libmpi${ext_})
+            endforeach()
+        endif()
+    endif()
+  endforeach()
 else()
   target_sources(lammps PRIVATE ${LAMMPS_SOURCE_DIR}/STUBS/mpi.cpp)
   add_library(mpi_stubs INTERFACE)
@@ -404,7 +442,9 @@ set(LAMMPS_SIZES_VALUES smallbig bigbig smallsmall)
 set_property(CACHE LAMMPS_SIZES PROPERTY STRINGS ${LAMMPS_SIZES_VALUES})
 validate_option(LAMMPS_SIZES LAMMPS_SIZES_VALUES)
 string(TOUPPER ${LAMMPS_SIZES} LAMMPS_SIZES)
-target_compile_definitions(lammps PUBLIC -DLAMMPS_${LAMMPS_SIZES})
+foreach(ext IN LISTS all_target_exts)
+    target_compile_definitions(lammps${ext} PUBLIC -DLAMMPS_${LAMMPS_SIZES})
+endforeach()
 
 # posix_memalign is not available on Windows
 # with INTEL package and Intel compilers we use TBB's aligned malloc
@@ -415,7 +455,9 @@ else()
   set(LAMMPS_MEMALIGN "64" CACHE STRING "enables the use of the posix_memalign() call instead of malloc() when large chunks or memory are allocated by LAMMPS. Set to 0 to disable")
 endif()
 if(NOT ${LAMMPS_MEMALIGN} STREQUAL "0")
-  target_compile_definitions(lammps PRIVATE -DLAMMPS_MEMALIGN=${LAMMPS_MEMALIGN})
+    foreach(ext IN LISTS all_target_exts)
+        target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_MEMALIGN=${LAMMPS_MEMALIGN})
+    endforeach()
 endif()
 
 # "hard" dependencies between packages resulting
@@ -466,9 +508,12 @@ if(BUILD_OMP)
   else()
     set(LAMMPS_OMP_COMPAT_LEVEL 3)
   endif()
-  target_compile_definitions(lammps PRIVATE -DLAMMPS_OMP_COMPAT=${LAMMPS_OMP_COMPAT_LEVEL})
-  target_link_libraries(lammps PRIVATE OpenMP::OpenMP_CXX)
-  target_link_libraries(lmp PRIVATE OpenMP::OpenMP_CXX)
+
+  foreach(ext IN LISTS all_target_exts)
+    target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_OMP_COMPAT=${LAMMPS_OMP_COMPAT_LEVEL})
+    target_link_libraries(lammps${ext} PRIVATE OpenMP::OpenMP_CXX)
+    target_link_libraries(lmp${ext} PRIVATE OpenMP::OpenMP_CXX)
+  endforeach()
 
   # this hack is required to correctly link with OpenMP support when using CrayClang version 15.0.2
   # CrayClang is only directly recognized by version 3.28 and later
@@ -510,7 +555,9 @@ if(PKG_ATC OR PKG_AWPMD OR PKG_ML-QUIP OR PKG_ML-POD OR PKG_ELECTRODE OR PKG_RHE
     set_target_properties(linalg PROPERTIES OUTPUT_NAME lammps_linalg${LAMMPS_MACHINE})
     set(BLAS_LIBRARIES "$<TARGET_FILE:linalg>")
     set(LAPACK_LIBRARIES "$<TARGET_FILE:linalg>")
-    target_link_libraries(lammps PRIVATE linalg)
+    foreach(ext IN LISTS all_target_exts)
+      target_link_libraries(lammps${ext} PRIVATE linalg)
+    endforeach()
   else()
     list(APPEND LAPACK_LIBRARIES ${BLAS_LIBRARIES})
   endif()
@@ -522,8 +569,10 @@ find_package(JPEG QUIET)
 option(WITH_JPEG "Enable JPEG support" ${JPEG_FOUND})
 if(WITH_JPEG)
   find_package(JPEG REQUIRED)
-  target_compile_definitions(lammps PRIVATE -DLAMMPS_JPEG)
-  target_link_libraries(lammps PRIVATE JPEG::JPEG)
+  foreach(ext IN LISTS all_target_exts)
+    target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_JPEG)
+    target_link_libraries(lammps${ext} PRIVATE JPEG::JPEG)
+  endforeach()
 endif()
 
 find_package(PNG QUIET)
@@ -536,8 +585,10 @@ endif()
 if(WITH_PNG)
   find_package(PNG REQUIRED)
   find_package(ZLIB REQUIRED)
-  target_link_libraries(lammps PRIVATE PNG::PNG ZLIB::ZLIB)
-  target_compile_definitions(lammps PRIVATE -DLAMMPS_PNG)
+  foreach(ext IN LISTS all_target_exts)
+    target_link_libraries(lammps${ext} PRIVATE PNG::PNG ZLIB::ZLIB)
+    target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_PNG)
+  endforeach()
 endif()
 
 find_program(GZIP_EXECUTABLE gzip)
@@ -545,7 +596,9 @@ find_package_handle_standard_args(GZIP REQUIRED_VARS GZIP_EXECUTABLE)
 option(WITH_GZIP "Enable GZIP support" ${GZIP_FOUND})
 if(WITH_GZIP)
   if(GZIP_FOUND OR ((CMAKE_SYSTEM_NAME STREQUAL "Windows") AND CMAKE_CROSSCOMPILING))
-    target_compile_definitions(lammps PRIVATE -DLAMMPS_GZIP)
+    foreach(ext IN LISTS all_target_exts)
+      target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_GZIP)
+    endforeach()
   else()
     message(FATAL_ERROR "gzip executable not found")
   endif()
@@ -556,7 +609,9 @@ find_package_handle_standard_args(FFMPEG REQUIRED_VARS FFMPEG_EXECUTABLE)
 option(WITH_FFMPEG "Enable FFMPEG support" ${FFMPEG_FOUND})
 if(WITH_FFMPEG)
   if(FFMPEG_FOUND OR ((CMAKE_SYSTEM_NAME STREQUAL "Windows") AND CMAKE_CROSSCOMPILING))
-    target_compile_definitions(lammps PRIVATE -DLAMMPS_FFMPEG)
+    foreach(ext IN LISTS all_target_exts)
+      target_compile_definitions(lammps${ext} PRIVATE -DLAMMPS_FFMPEG)
+    endforeach()
   else()
     message(FATAL_ERROR "ffmpeg executable not found")
   endif()
@@ -588,8 +643,10 @@ endif()
 
 set(CMAKE_TUNE_FLAGS "${CMAKE_TUNE_DEFAULT}" CACHE STRING "Compiler and machine specific optimization flags (compilation only)")
 separate_arguments(CMAKE_TUNE_FLAGS)
-target_compile_options(lammps PRIVATE ${CMAKE_TUNE_FLAGS})
-target_compile_options(lmp PRIVATE ${CMAKE_TUNE_FLAGS})
+foreach(ext IN LISTS all_target_exts)
+   target_compile_options(lammps${ext} PRIVATE ${CMAKE_TUNE_FLAGS})
+   target_compile_options(lmp${ext} PRIVATE ${CMAKE_TUNE_FLAGS})
+endforeach()
 ########################################################################
 # Basic system tests (standard libraries, headers, functions, types)   #
 ########################################################################
@@ -604,7 +661,9 @@ endif()
 find_library(STANDARD_MATH_LIB m DOC "Standard Math library")
 mark_as_advanced(STANDARD_MATH_LIB)
 if(STANDARD_MATH_LIB)
-  target_link_libraries(lammps PRIVATE ${STANDARD_MATH_LIB})
+  foreach(ext IN LISTS all_target_exts)
+    target_link_libraries(lammps${ext} PRIVATE ${STANDARD_MATH_LIB})
+  endforeach()
 endif()
 
 ######################################
@@ -640,8 +699,10 @@ foreach(PKG ${STANDARD_PACKAGES})
     # detects styles in package and adds them to global list
     RegisterStyles(${${PKG}_SOURCES_DIR})
 
-    target_sources(lammps PRIVATE ${${PKG}_SOURCES})
-    target_include_directories(lammps PRIVATE ${${PKG}_SOURCES_DIR})
+    foreach(ext IN LISTS all_target_exts)
+        target_sources(lammps${ext} PRIVATE ${${PKG}_SOURCES})
+        target_include_directories(lammps${ext} PRIVATE ${${PKG}_SOURCES_DIR})
+    endforeach()
   endif()
 
   RegisterPackages(${${PKG}_SOURCES_DIR})
@@ -670,7 +731,9 @@ foreach(PKG_LIB POEMS ATC AWPMD H5MD)
       ${LAMMPS_LIB_SOURCE_DIR}/${PKG_LIB}/[^.]*.c ${LAMMPS_LIB_SOURCE_DIR}/${PKG_LIB}/[^.]*.cpp)
     add_library(${PKG_LIB} STATIC ${${PKG_LIB}_SOURCES})
     set_target_properties(${PKG_LIB} PROPERTIES OUTPUT_NAME lammps_${PKG_LIB}${LAMMPS_MACHINE})
-    target_link_libraries(lammps PRIVATE ${PKG_LIB})
+    foreach(ext IN LISTS all_target_exts)
+        target_link_libraries(lammps${ext} PRIVATE ${PKG_LIB})
+    endforeach()
     if(PKG_LIB STREQUAL "awpmd")
       target_include_directories(awpmd PUBLIC ${LAMMPS_LIB_SOURCE_DIR}/awpmd/systems/interact ${LAMMPS_LIB_SOURCE_DIR}/awpmd/ivutils/include)
     elseif(PKG_LIB STREQUAL "h5md")
@@ -682,7 +745,9 @@ foreach(PKG_LIB POEMS ATC AWPMD H5MD)
 endforeach()
 
 if(PKG_ELECTRODE OR PKG_ML-POD)
-  target_link_libraries(lammps PRIVATE ${LAPACK_LIBRARIES})
+    foreach(ext IN LISTS all_target_exts)
+        target_link_libraries(lammps${ext} PRIVATE ${LAPACK_LIBRARIES})
+    endforeach()
 endif()
 
 if(PKG_AWPMD)
@@ -717,7 +782,9 @@ foreach(PKG_WITH_INCL CORESHELL DPD-BASIC DPD-SMOOTH MC MISC PHONON QEQ OPENMP K
 endforeach()
 
 if(PKG_PLUGIN)
-  target_compile_definitions(lammps PRIVATE -DLMP_PLUGIN)
+    foreach(ext IN LISTS all_target_exts)
+        target_compile_definitions(lammps${ext} PRIVATE -DLMP_PLUGIN)
+    endforeach()
 endif()
 
 # link with -ldl or equivalent for plugin loading; except on Windows
@@ -731,7 +798,9 @@ endif()
 # and after everything else that is compiled locally
 ######################################################################
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  target_link_libraries(lammps PRIVATE "wsock32;psapi")
+    foreach(ext IN LISTS all_target_exts)
+        target_link_libraries(lammps${ext} PRIVATE "wsock32;psapi")
+    endforeach()
 endif()
 
 ######################################################
@@ -744,7 +813,9 @@ set(LAMMPS_STYLE_HEADERS_DIR ${CMAKE_CURRENT_BINARY_DIR}/styles)
 GenerateStyleHeaders(${LAMMPS_STYLE_HEADERS_DIR})
 GeneratePackagesHeaders(${LAMMPS_STYLE_HEADERS_DIR})
 
-target_include_directories(lammps PRIVATE ${LAMMPS_STYLE_HEADERS_DIR})
+foreach(ext IN LISTS all_target_exts)
+    target_include_directories(lammps${ext} PRIVATE ${LAMMPS_STYLE_HEADERS_DIR})
+endforeach()
 
 ######################################
 # Generate lmpinstalledpkgs.h
@@ -773,7 +844,9 @@ add_custom_target(gitversion COMMAND ${CMAKE_COMMAND}
   -DLAMMPS_STYLE_HEADERS_DIR="${LAMMPS_STYLE_HEADERS_DIR}"
   -P ${CMAKE_CURRENT_SOURCE_DIR}/Modules/generate_lmpgitversion.cmake)
 set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${LAMMPS_STYLE_HEADERS_DIR}/gitversion.h)
-add_dependencies(lammps gitversion)
+foreach(ext IN LISTS all_target_exts)
+    add_dependencies(lammps${ext} gitversion)
+endforeach()
 
 ###########################################
 # Actually add executable and lib to build
@@ -781,7 +854,9 @@ add_dependencies(lammps gitversion)
 get_property(LANGUAGES GLOBAL PROPERTY ENABLED_LANGUAGES)
 list(FIND LANGUAGES "Fortran" _index)
 if(_index GREATER -1)
-  target_link_libraries(lammps PRIVATE ${CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES})
+    foreach(ext IN LISTS all_target_exts)
+        target_link_libraries(lammps${ext} PRIVATE ${CMAKE_Fortran_IMPLICIT_LINK_LIBRARIES})
+    endforeach()
 endif()
 set(LAMMPS_CXX_HEADERS angle.h atom.h bond.h citeme.h comm.h command.h compute.h dihedral.h domain.h
   error.h exceptions.h fix.h force.h group.h improper.h input.h info.h kspace.h lammps.h lattice.h
@@ -789,15 +864,19 @@ set(LAMMPS_CXX_HEADERS angle.h atom.h bond.h citeme.h comm.h command.h compute.h
   platform.h pointers.h region.h timer.h universe.h update.h utils.h variable.h)
 set(LAMMPS_FMT_HEADERS core.h format.h)
 
-set_target_properties(lammps PROPERTIES OUTPUT_NAME lammps${LAMMPS_MACHINE})
-set_target_properties(lammps PROPERTIES SOVERSION ${SOVERSION})
-set_target_properties(lammps PROPERTIES PREFIX "lib")
-target_include_directories(lammps PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/lammps>)
+foreach(ext IN LISTS all_target_exts)
+    set_target_properties(lammps${ext} PROPERTIES OUTPUT_NAME lammps${LAMMPS_MACHINE}${ext})
+    set_target_properties(lammps${ext} PROPERTIES SOVERSION ${SOVERSION})
+    set_target_properties(lammps${ext} PROPERTIES PREFIX "lib")
+    target_include_directories(lammps${ext} PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/lammps>)
+endforeach()
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/fmt)
 foreach(_HEADER ${LAMMPS_CXX_HEADERS})
   add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/${_HEADER} COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LAMMPS_SOURCE_DIR}/${_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/${_HEADER} DEPENDS ${LAMMPS_SOURCE_DIR}/${_HEADER})
   add_custom_target(${_HEADER} DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/${_HEADER})
-  add_dependencies(lammps ${_HEADER})
+  foreach(ext IN LISTS all_target_exts)
+    add_dependencies(lammps${ext} ${_HEADER})
+  endforeach()
   if(BUILD_SHARED_LIBS)
     install(FILES ${LAMMPS_SOURCE_DIR}/${_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lammps)
   endif()
@@ -805,12 +884,18 @@ endforeach()
 foreach(_HEADER ${LAMMPS_FMT_HEADERS})
   add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/fmt/${_HEADER} COMMAND ${CMAKE_COMMAND} -E copy_if_different ${LAMMPS_SOURCE_DIR}/fmt/${_HEADER} ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/fmt/${_HEADER} DEPENDS ${LAMMPS_SOURCE_DIR}/fmt/${_HEADER})
   add_custom_target(fmt_${_HEADER} DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/includes/lammps/fmt/${_HEADER})
-  add_dependencies(lammps fmt_${_HEADER})
+  foreach(ext IN LISTS all_target_exts)
+    add_dependencies(lammps${ext} fmt_${_HEADER})
+  endforeach()
   if(BUILD_SHARED_LIBS)
     install(FILES ${LAMMPS_SOURCE_DIR}/fmt/${_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lammps/fmt)
   endif()
 endforeach()
-target_include_directories(lammps INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/includes>)
+foreach(ext IN LISTS all_target_exts)
+    target_include_directories(lammps${ext} INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/includes>)
+endforeach()
+
+# TODO: check next code block integration
 add_library(LAMMPS::lammps ALIAS lammps)
 get_target_property(LAMMPS_DEFINES lammps INTERFACE_COMPILE_DEFINITIONS)
 set(LAMMPS_API_DEFINES)
@@ -965,7 +1050,7 @@ message(STATUS "<<< Compilers and Flags: >>>
       Type:          ${CMAKE_CXX_COMPILER_ID}
       Version:       ${CMAKE_CXX_COMPILER_VERSION}
       C++ Standard:  ${CMAKE_CXX_STANDARD}
-      C++ Flags:    ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BTYPE}}
+      C++ Flags:     ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${BTYPE}}
       Defines:       ${DEFINES}")
 if(CMAKE_CXX_COMPILER_LAUNCHER)
   message(STATUS "      Launcher:      ${CMAKE_CXX_COMPILER_LAUNCHER}")
@@ -980,14 +1065,14 @@ if(_index GREATER -1)
   message(STATUS "Fortran Compiler: ${CMAKE_Fortran_COMPILER}
       Type:          ${CMAKE_Fortran_COMPILER_ID}
       Version:       ${CMAKE_Fortran_COMPILER_VERSION}
-      Fortran Flags:${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_${BTYPE}}")
+      Fortran Flags: ${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_${BTYPE}}")
 endif()
 list(FIND LANGUAGES "C" _index)
 if(_index GREATER -1)
   message(STATUS "C compiler:       ${CMAKE_C_COMPILER}
       Type:          ${CMAKE_C_COMPILER_ID}
       Version:       ${CMAKE_C_COMPILER_VERSION}
-      C Flags:      ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${BTYPE}}")
+      C Flags:       ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${BTYPE}}")
   if(CMAKE_C_COMPILER_LAUNCHER)
     message(STATUS "      Launcher:      ${CMAKE_C_COMPILER_LAUNCHER}")
   endif()

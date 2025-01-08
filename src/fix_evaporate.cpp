@@ -25,6 +25,7 @@
 #include "random_park.h"
 #include "region.h"
 #include "update.h"
+#include "lammps_mpi.h"
 
 #include <cstring>
 
@@ -192,8 +193,15 @@ void FixEvaporate::pre_exchange()
       if (region->match(x[i][0], x[i][1], x[i][2])) list[ncount++] = i;
 
   int nall, nbefore;
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request req;
+
+  MPI_Scan(&ncount, &nbefore, 1, MPI_INT, MPI_SUM, world);
+  MPI_Iallreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world, &req);
+#else
   MPI_Allreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world);
   MPI_Scan(&ncount, &nbefore, 1, MPI_INT, MPI_SUM, world);
+#endif
   nbefore -= ncount;
 
   // ndel = total # of atom deletions, in or out of region
@@ -207,6 +215,10 @@ void FixEvaporate::pre_exchange()
   // choose atoms randomly across all procs and mark them for deletion
   // shrink eligible list as my atoms get marked
   // keep ndel,ncount,nall,nbefore current after each atom deletion
+
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
 
   if (molflag == 0) {
     while (nall && ndel < nflux) {
@@ -343,9 +355,16 @@ void FixEvaporate::pre_exchange()
 
       MPI_Allreduce(&ndelone, &ndelall, 1, MPI_INT, MPI_SUM, world);
       ndel += ndelall;
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+      MPI_Iallreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world, &req);
+#else
       MPI_Allreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world);
+#endif
       MPI_Scan(&ncount, &nbefore, 1, MPI_INT, MPI_SUM, world);
       nbefore -= ncount;
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+      MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
     }
   }
 

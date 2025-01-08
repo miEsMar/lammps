@@ -20,10 +20,10 @@
 #include "fmt/format.h"
 #include "text_file_reader.h"
 #include "utils.h"
+#include "lammps_mpi.h"
 
 #include <deque>
 #include <exception>
-#include <mpi.h>
 
 ////////////////////////////////////////////////////////////////////////
 // include system headers and tweak system settings

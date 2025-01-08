@@ -31,7 +31,7 @@
 /* To allow including the library interface without MPI */
 
 #if defined(LAMMPS_LIB_MPI)
-#include <mpi.h>
+# include "lammps_mpi.h"
 #endif
 
 #if defined(LAMMPS_BIGBIG) || defined(LAMMPS_SMALLBIG)

@@ -28,6 +28,7 @@
 #include "modify.h"
 #include "update.h"
 #include "variable.h"
+#include "lammps_mpi.h"
 
 using namespace LAMMPS_NS;
 using namespace FixConst;
@@ -385,15 +386,28 @@ void FixAveHistoWeight::end_of_step()
   // merge histogram stats across procs if necessary
 
   if (kind == PERATOM || kind == LOCAL) {
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    MPI_Request req;
+
+    MPI_Iallreduce(bin,bin_all,nbins,MPI_DOUBLE,MPI_SUM,world, &req);
+
+    MPI_Allreduce(stats,     stats_all,   2,MPI_DOUBLE,MPI_SUM,world);
+    MPI_Allreduce(&stats[2],&stats_all[2],1,MPI_DOUBLE,MPI_MIN,world);
+    MPI_Allreduce(&stats[3],&stats_all[3],1,MPI_DOUBLE,MPI_MAX,world);
+#else
     MPI_Allreduce(stats,stats_all,2,MPI_DOUBLE,MPI_SUM,world);
     MPI_Allreduce(&stats[2],&stats_all[2],1,MPI_DOUBLE,MPI_MIN,world);
     MPI_Allreduce(&stats[3],&stats_all[3],1,MPI_DOUBLE,MPI_MAX,world);
     MPI_Allreduce(bin,bin_all,nbins,MPI_DOUBLE,MPI_SUM,world);
+#endif
 
     stats[0] = stats_all[0];
     stats[1] = stats_all[1];
     stats[2] = stats_all[2];
     stats[3] = stats_all[3];
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+    MPI_Wait(&req, MPI_STATUS_IGNORE);
+#endif
     for (int i = 0; i < nbins; i++) bin[i] = bin_all[i];
   }
 

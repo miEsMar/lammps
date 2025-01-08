@@ -20,6 +20,7 @@
 #include "math_eigen.h"
 #include "math_extra.h"
 #include "memory.h"
+#include "lammps_mpi.h"
 
 using namespace LAMMPS_NS;
 
@@ -141,7 +142,13 @@ void ComputeOmegaChunk::compute_array()
       inertia[index][5] -= massone * dx * dz;
     }
 
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Request reqs[2];
+
+  MPI_Iallreduce(&inertia[0][0], &inertiaall[0][0], 6 * nchunk, MPI_DOUBLE, MPI_SUM, world, reqs);
+#else
   MPI_Allreduce(&inertia[0][0], &inertiaall[0][0], 6 * nchunk, MPI_DOUBLE, MPI_SUM, world);
+#endif
 
   // compute angmom for each chunk
 
@@ -164,7 +171,13 @@ void ComputeOmegaChunk::compute_array()
       angmom[index][2] += massone * (dx * v[i][1] - dy * v[i][0]);
     }
 
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  MPI_Iallreduce(&angmom[0][0], &angmomall[0][0], 3 * nchunk, MPI_DOUBLE, MPI_SUM, world, &reqs[1]);
+
+  MPI_Waitall(2, reqs, MPI_STATUS_IGNORE);
+#else
   MPI_Allreduce(&angmom[0][0], &angmomall[0][0], 3 * nchunk, MPI_DOUBLE, MPI_SUM, world);
+#endif
 
   // compute omega for each chunk
 

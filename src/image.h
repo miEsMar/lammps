@@ -128,7 +128,11 @@ class Image : protected Pointers {
   // internal methods
 
   void draw_pixel(int, int, double, double *, double *);
+#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+  void compute_SSAO(void *reqs);
+#else
   void compute_SSAO();
+#endif
 
   // inline functions
 
