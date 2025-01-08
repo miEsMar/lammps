@@ -193,7 +193,7 @@ void FixEvaporate::pre_exchange()
       if (region->match(x[i][0], x[i][1], x[i][2])) list[ncount++] = i;
 
   int nall, nbefore;
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request req;
 
   MPI_Scan(&ncount, &nbefore, 1, MPI_INT, MPI_SUM, world);
@@ -216,7 +216,7 @@ void FixEvaporate::pre_exchange()
   // shrink eligible list as my atoms get marked
   // keep ndel,ncount,nall,nbefore current after each atom deletion
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
 
@@ -355,14 +355,14 @@ void FixEvaporate::pre_exchange()
 
       MPI_Allreduce(&ndelone, &ndelall, 1, MPI_INT, MPI_SUM, world);
       ndel += ndelall;
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
       MPI_Iallreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world, &req);
 #else
       MPI_Allreduce(&ncount, &nall, 1, MPI_INT, MPI_SUM, world);
 #endif
       MPI_Scan(&ncount, &nbefore, 1, MPI_INT, MPI_SUM, world);
       nbefore -= ncount;
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
       MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
     }

@@ -3,4 +3,4 @@ CompileFlags:
     -std=c++17,
     -DLAMMPS_MPIDPU,
     -I/home/mesposit/repos/MPI_Offload/src,
-    -DLAMMPS_MPIDPU_OPTIMISED_CODE ]
+    -DLAMMPS_UNLOCK_COMM_COMP_OVERLAP ]

@@ -605,7 +605,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   int * size_buf_rnk;
   memory->create(size_buf_rnk, nprocs, "replicate:size_buf_rnk");
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request allgvreq;
   MPI_Iallgather(&n, 1, MPI_INT, size_buf_rnk, 1, MPI_INT, world, &allgvreq);
 #else
@@ -615,7 +615,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   // size of buf_all
 
   int size_buf_all = 0;
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request allrreq;
   MPI_Iallreduce(&n, &size_buf_all, 1, MPI_INT, MPI_SUM, world, &allrreq);
 #else
@@ -628,7 +628,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   memory->create(disp_buf_rnk, nprocs, "replicate:disp_buf_rnk");
   disp_buf_rnk[0] = 0;
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Wait(&allgvreq, MPI_STATUS_IGNORE);
 #endif
 
@@ -637,7 +637,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
 
   // allgather buf_all
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Wait(&allrreq, MPI_STATUS_IGNORE);
 #endif
 
@@ -655,7 +655,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   memory->create(buf_all, size_buf_all, "replicate:buf_all");
 
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Iallgatherv(buf,n,MPI_DOUBLE,
                   buf_all,size_buf_rnk,disp_buf_rnk,MPI_DOUBLE,
                   world,&allgvreq);
@@ -699,7 +699,7 @@ void Replicate::replicate_by_bbox(int nx, int ny, int nz,
   // if bond/periodic option
   // store old_x and old_tag for the entire original system
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   // TODO: this can be improved
   MPI_Wait(&allgvreq, MPI_STATUS_IGNORE);
 #endif

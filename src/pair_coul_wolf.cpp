@@ -243,7 +243,7 @@ void PairCoulWolf::read_restart(FILE *fp)
 
   int i, j;
   int me = comm->me;
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   int nreqs = 0;
   MPI_Request *reqs = NULL;
 

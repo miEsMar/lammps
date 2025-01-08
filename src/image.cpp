@@ -315,7 +315,7 @@ void Image::clear()
 void Image::merge()
 {
   MPI_Request requests[3];
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request srequests[3];
 #endif
 
@@ -348,7 +348,7 @@ void Image::merge()
       }
 
     } else if (me >= nhalf && me < 2*nhalf) {
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
       MPI_Isend(imageBuffer,npixels*3,MPI_BYTE,me-nhalf,0,world,srequests);
       MPI_Isend(depthBuffer,npixels,MPI_DOUBLE,me-nhalf,0,world,&srequests[1]);
       if (ssao) {
@@ -374,7 +374,7 @@ void Image::merge()
   // use Gatherv() if subset of pixels is not the same size on every proc
 
   if (ssao) {
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     MPI_Ibcast(depthBuffer,npixels,MPI_DOUBLE,0,world,requests);
     MPI_Ibcast(surfaceBuffer,npixels*2,MPI_DOUBLE,0,world,&requests[1]);
     MPI_Ibcast(imageBuffer,npixels*3,MPI_BYTE,0,world,&requests[2]);
@@ -957,7 +957,7 @@ void Image::draw_pixel(int ix, int iy, double depth,
 }
 
 /* ---------------------------------------------------------------------- */
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
 void Image::compute_SSAO(void *reqs)
 #else
 void Image::compute_SSAO()
@@ -987,7 +987,7 @@ void Image::compute_SSAO()
   for (int i = 0; i < pixelstop - pixelstart; ++i) uniform[i] = random->uniform();
 
   // Defer wait of request right before data is really needed.
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Waitall(3, (MPI_Request *)reqs, MPI_STATUSES_IGNORE);
 #endif
 

@@ -1040,7 +1040,7 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
   memcpy(sendcount,procs_a2a,nprocs*sizeof(int));
 
   memory->create(recvcount,nprocs,"rendezvous:recvcount");
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request req;
 
   MPI_Ialltoall(sendcount,1,MPI_INT,recvcount,1,MPI_INT,world, &req);
@@ -1052,7 +1052,7 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
   memory->create(rdispls,nprocs,"rendezvous:rdispls");
   sdispls[0] = rdispls[0] = 0;
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
 
@@ -1183,7 +1183,7 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
 
   outbuf = (char *) memory->smalloc((bigint) nout*outsize+1,"rendezvous:outbuf");
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Ialltoallv(outbuf_a2a,sendcount,sdispls,MPI_CHAR,
                  outbuf,recvcount,rdispls,MPI_CHAR,world, &req);
 #else
@@ -1214,7 +1214,7 @@ rendezvous_all2all(int n, char *inbuf, int insize, int inorder, int *procs,
                                  (bigint) nrvous_out*sizeof(int) +
                                  4*nprocs*sizeof(int) +
                                  MAX(all2all1_bytes,all2all2_bytes));
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
   return nout;

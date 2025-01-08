@@ -386,7 +386,7 @@ void FixAveHistoWeight::end_of_step()
   // merge histogram stats across procs if necessary
 
   if (kind == PERATOM || kind == LOCAL) {
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     MPI_Request req;
 
     MPI_Iallreduce(bin,bin_all,nbins,MPI_DOUBLE,MPI_SUM,world, &req);
@@ -405,7 +405,7 @@ void FixAveHistoWeight::end_of_step()
     stats[1] = stats_all[1];
     stats[2] = stats_all[2];
     stats[3] = stats_all[3];
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
     for (int i = 0; i < nbins; i++) bin[i] = bin_all[i];

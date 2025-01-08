@@ -370,7 +370,7 @@ void FixWallTable::bcast_table(Table &tb)
     memory->create(tb.ffile, tb.ninput, "wall:ffile");
   }
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request fpflag_req;
   MPI_Request other_reqs[5];
   int nother_reqs = 3;
@@ -387,7 +387,7 @@ void FixWallTable::bcast_table(Table &tb)
   MPI_Bcast(&tb.fpflag, 1, MPI_INT, 0, world);
 #endif
   if (tb.fpflag) {
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     nother_reqs = 5;
     MPI_Ibcast(&tb.fplo, 1, MPI_DOUBLE, 0, world, &other_reqs[3]);
     MPI_Ibcast(&tb.fphi, 1, MPI_DOUBLE, 0, world, &other_reqs[4]);

@@ -102,7 +102,7 @@ void ComputeDipole::compute_vector()
     }
   }
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Request reqs[4];
 
   MPI_Iallreduce(&massproc, &masstotal, 1, MPI_DOUBLE, MPI_SUM, world, reqs);
@@ -135,7 +135,7 @@ void ComputeDipole::compute_vector()
   }
 
   // correct for position dependence with a net charged group
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Iallreduce(dipole, vector, 3, MPI_DOUBLE, MPI_SUM, world, &reqs[3]);
 
   MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE);  // Wait for masstotal, com
@@ -148,7 +148,7 @@ void ComputeDipole::compute_vector()
     com[1] /= masstotal;
     com[2] /= masstotal;
   }
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   MPI_Waitall(2, &reqs[2], MPI_STATUSES_IGNORE);  // Wait for chrgtotal, vector
 #endif
   vector[0] -= chrgtotal * com[0];

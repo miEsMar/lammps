@@ -263,7 +263,7 @@ double PairLJExpand::init_one(int i, int j)
       if (type[k] == j) count[1] += 1.0;
     }
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     MPI_Request req;
 
     MPI_Iallreduce(count, all, 2, MPI_DOUBLE, MPI_SUM, world, &req);
@@ -281,7 +281,7 @@ double PairLJExpand::init_one(int i, int j)
     double shift2 = shift1 * shift1;
     double shift3 = shift2 * shift1;
 
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
     MPI_Wait(&req, MPI_STATUS_IGNORE);
 #endif
 

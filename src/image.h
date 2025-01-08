@@ -128,7 +128,7 @@ class Image : protected Pointers {
   // internal methods
 
   void draw_pixel(int, int, double, double *, double *);
-#ifdef LAMMPS_MPIDPU_OPTIMISED_CODE
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
   void compute_SSAO(void *reqs);
 #else
   void compute_SSAO();
