@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [
+    -std=c++17,
+    -DLAMMPS_MPIDPU,
+    -I/home/mesposit/repos/MPI_Offload/src,
+    -DLAMMPS_MPIDPU_OPTIMISED_CODE ]
