@@ -52,6 +52,7 @@
 #include "timer.h"
 #include "universe.h"
 #include "update.h"
+#include "utils.h"
 #include "variable.h"
 #include "version.h"
 
@@ -563,8 +564,12 @@ LAMMPS::LAMMPS(int narg, char **arg, MPI_Comm communicator) :
       else infile = fopen(arg[inflag],"r");
       if (infile == nullptr)
         error->one(FLERR,"Cannot open input script {}: {}", arg[inflag], utils::getsyserror());
-      if (!helpflag)
+      if (!helpflag) {
         utils::logmesg(this,"LAMMPS ({}{})\n", version, update_string);
+#ifdef LAMMPS_UNLOCK_COMM_COMP_OVERLAP
+        utils::logmesg(this, "\nINFO:  this version is compiled with  LAMMPS_UNLOCK_COMM_COMP_OVERLAP !\n\n");
+#endif
+      }
 
      // warn against using I/O redirection in parallel runs
       if ((inflag == 0) && (universe->nprocs > 1))
