@@ -11,7 +11,7 @@ else
     export PATH=${HOME}/ompi/install/lib:$PATH
     export PATH=${HOME}/ompi/install/bin:$PATH
 fi
-export MPIDPU_ROOT="/gpfs/projects/bsc85/mpi_offload"
+export MOSE_ROOT="${HOME}/mpi_offload"
 
 build_dir="$( pwd )/build"
 if [ ! -d "${build_dir}" ]; then mkdir "${build_dir}"; fi
