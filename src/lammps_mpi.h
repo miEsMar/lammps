@@ -1,4 +1,4 @@
 #include <mpi.h>
-#ifdef LAMMPS_MPIDPU
-# include "mpidpu.h"
+#ifdef LAMMPS_MOSE
+#include "mose.h"
 #endif
