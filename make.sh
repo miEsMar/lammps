@@ -1,16 +1,10 @@
 #!/bin/bash
 #
 
-module purge
-module load gcc
-module load cmake
-
-if false; then
-    module load openmpi/4.1.5-gcc
-else
-    module load openmpi-debug
+env_file="$( pwd )/env.sh"
+if [ -f "${env_file}" ]; then
+    . ${env_file}
 fi
-export MOSE_ROOT="${HOME}/mpi_offload"
 
 build_dir="$( pwd )/build"
 if [ ! -d "${build_dir}" ]; then mkdir "${build_dir}"; fi
@@ -29,5 +23,9 @@ cmake \
    -D LAMMPS_MACHINE=mpi \
    -S ./cmake -B ${build_dir} $*
 
-cmake --build ${build_dir} -j 8
+if [ "$?" == "0" ]; then
+    pushd build
+    make -j 16
+    popd
+fi
 
