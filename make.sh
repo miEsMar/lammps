@@ -8,8 +8,7 @@ module load cmake
 if false; then
     module load openmpi/4.1.5-gcc
 else
-    export PATH=${HOME}/ompi/install/lib:$PATH
-    export PATH=${HOME}/ompi/install/bin:$PATH
+    module load openmpi-debug
 fi
 export MOSE_ROOT="${HOME}/mpi_offload"
 
